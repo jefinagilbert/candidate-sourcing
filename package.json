@@ -14,7 +14,7 @@
     "build:frontend": "yarn workspace frontend build",
     "typecheck": "yarn workspace backend typecheck && yarn workspace frontend typecheck",
     "lint": "yarn workspace backend lint && yarn workspace frontend typecheck",
-    "test": "yarn workspace backend test --passWithNoTests"
+    "test": "yarn workspace backend test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
