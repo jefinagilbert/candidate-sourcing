@@ -1,0 +1,22 @@
+{
+  "name": "flexiple-ai-hr-monorepo",
+  "version": "1.0.0",
+  "description": "Flexiple AI Recruiter - The Sourcing Refinement Loop Monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue.bold,magenta.bold\" \"yarn workspace backend dev\" \"yarn workspace frontend dev\"",
+    "start": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue.bold,magenta.bold\" \"yarn workspace backend start:prod\" \"yarn workspace frontend start\"",
+    "build": "yarn workspace backend build && yarn workspace frontend build",
+    "build:backend": "yarn workspace backend build",
+    "build:frontend": "yarn workspace frontend build",
+    "typecheck": "yarn workspace backend typecheck && yarn workspace frontend typecheck",
+    "lint": "yarn workspace backend lint && yarn workspace frontend typecheck",
+    "test": "yarn workspace backend test --passWithNoTests"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
