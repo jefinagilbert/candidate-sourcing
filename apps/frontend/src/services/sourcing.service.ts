@@ -10,6 +10,7 @@ export interface SearchResponse {
   needsClarification?: boolean;
   clarificationMessage?: string;
   suggestedClarifications?: string[];
+  message?: string;
   filters: SearchFilters;
   rubric: FitRubric;
   results: ScoredCandidate[];
@@ -22,6 +23,7 @@ export interface SearchResponse {
 export interface RefineResponse {
   filters: SearchFilters;
   rubric: FitRubric;
+  message?: string;
   changes: {
     filter_changes: string[];
     rubric_changes: string[];
@@ -40,10 +42,10 @@ export const SourcingApiService = {
     );
   },
 
-  async executeInitialSearch(query: string): Promise<SearchResponse> {
+  async executeInitialSearch(query: string, strictMatch: boolean = true): Promise<SearchResponse> {
     return fetchJson<SearchResponse>('/sourcing/search', {
       method: 'POST',
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, strictMatch }),
     });
   },
 
@@ -51,6 +53,7 @@ export const SourcingApiService = {
     userFeedback: string;
     currentFilters: SearchFilters;
     currentRubric: FitRubric;
+    strictMatch?: boolean;
     profileSignals?: Array<{ candidateId: string; candidateName: string; feedback: string; reason?: string }>;
     chatHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   }): Promise<RefineResponse> {
@@ -60,12 +63,12 @@ export const SourcingApiService = {
     });
   },
 
-  async reevaluateFilters(filters: SearchFilters, rubric: FitRubric) {
-    return fetchJson<{ results: ScoredCandidate[]; filteredCount: number }>(
+  async reevaluateFilters(filters: SearchFilters, rubric: FitRubric, strictMatch: boolean = true) {
+    return fetchJson<{ results: ScoredCandidate[]; filteredCount: number; message?: string }>(
       '/sourcing/reevaluate',
       {
         method: 'POST',
-        body: JSON.stringify({ filters, rubric }),
+        body: JSON.stringify({ filters, rubric, strictMatch }),
       }
     );
   },

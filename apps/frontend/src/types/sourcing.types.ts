@@ -29,6 +29,7 @@ export interface SearchFilters {
   company_types: CompanyType[];
   target_companies?: string[];
   keywords?: string[];
+  strict_match?: boolean;
 }
 
 export interface RubricCriterion {
@@ -66,11 +67,14 @@ export interface ScoredCandidate {
   explanation: string;
   cited_facts: CandidateFactCitation[];
   criteria_scores: CriterionScore[];
+  is_exact_match?: boolean;
+  related_match_reason?: string;
   passed_filters: {
     skills: boolean;
     experience: boolean;
     location: boolean;
     company_type: boolean;
+    company_name?: boolean;
     notes?: string;
   };
   feedback?: 'match' | 'reject' | null;
@@ -89,9 +93,11 @@ export interface ChatMessage {
 
 export interface SourcingState {
   currentQuery: string;
+  strictMatchMode: boolean;
   needsClarification: boolean;
   clarificationMessage: string | null;
   suggestedClarifications: string[];
+  searchMessage?: string | null;
   filters: SearchFilters;
   rubric: FitRubric;
   candidates: ScoredCandidate[];

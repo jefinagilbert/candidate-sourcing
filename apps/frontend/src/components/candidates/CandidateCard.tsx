@@ -12,17 +12,20 @@ import {
   GraduationCap,
   Sparkles,
   ExternalLink,
+  Compass,
   Building2,
+  ArrowLeftRight,
 } from 'lucide-react';
 
 interface CandidateCardProps {
   candidate: ScoredCandidate;
   rank: number;
+  targetCompanies?: string[];
 }
 
-export const CandidateCard: React.FC<CandidateCardProps> = ({ candidate, rank }) => {
+export const CandidateCard: React.FC<CandidateCardProps> = ({ candidate, rank, targetCompanies }) => {
   const dispatch = useAppDispatch();
-  const { profile, match_score, explanation, feedback } = candidate;
+  const { profile, match_score, explanation, feedback, is_exact_match, related_match_reason } = candidate;
 
   const handleFeedback = (type: 'match' | 'reject') => {
     dispatch(
@@ -47,6 +50,21 @@ export const CandidateCard: React.FC<CandidateCardProps> = ({ candidate, rank })
         return 'bg-zinc-800 text-zinc-400 border-zinc-700/60';
     }
   };
+
+  // Determine if current company matches the target search or if it's a past-company match
+  const hasTargetSearch = targetCompanies && targetCompanies.length > 0;
+  const currentCompanyMatchesTarget = hasTargetSearch && targetCompanies.some(tc =>
+    profile.current_company.toLowerCase().includes(tc.toLowerCase()) ||
+    tc.toLowerCase().includes(profile.current_company.toLowerCase())
+  );
+  const matchingPastCompany = hasTargetSearch && !currentCompanyMatchesTarget
+    ? profile.past_companies?.find(p =>
+        targetCompanies.some(tc =>
+          p.company.toLowerCase().includes(tc.toLowerCase()) ||
+          tc.toLowerCase().includes(p.company.toLowerCase())
+        )
+      )
+    : null;
 
   return (
     <div
@@ -79,12 +97,57 @@ export const CandidateCard: React.FC<CandidateCardProps> = ({ candidate, rank })
                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium border capitalize ${getCompanyBadgeClass(profile.current_company_type)}`}>
                   {profile.current_company_type}
                 </span>
+
+                {is_exact_match === false && related_match_reason && (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-indigo-950/60 text-indigo-300 border border-indigo-700/50 flex items-center space-x-1">
+                    <Compass className="w-2.5 h-2.5 text-indigo-400" />
+                    <span>Transferable Match</span>
+                  </span>
+                )}
               </div>
 
               <p className="text-xs text-zinc-300 mt-0.5 font-medium">
                 {profile.current_title} at{' '}
                 <span className="text-zinc-100 font-semibold">{profile.current_company}</span>
               </p>
+
+              {/* Past company connection badge — shown when target company matched via past employment */}
+              {matchingPastCompany && (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-950/50 text-amber-300 border border-amber-600/40">
+                    <Building2 className="w-3 h-3 text-amber-400" />
+                    Previously at {matchingPastCompany.company}
+                    <span className="text-amber-400/70 font-normal ml-0.5">
+                      · {matchingPastCompany.years}yr{matchingPastCompany.years !== 1 ? 's' : ''} as {matchingPastCompany.title}
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {/* Past companies summary (compact) */}
+              {profile.past_companies && profile.past_companies.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] text-zinc-500 font-medium flex items-center gap-0.5">
+                    <ArrowLeftRight className="w-2.5 h-2.5" />
+                    Past:
+                  </span>
+                  {profile.past_companies.map((pc, i) => (
+                    <span
+                      key={i}
+                      className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                        hasTargetSearch && targetCompanies.some(tc =>
+                          pc.company.toLowerCase().includes(tc.toLowerCase()) ||
+                          tc.toLowerCase().includes(pc.company.toLowerCase())
+                        )
+                          ? 'bg-amber-950/40 text-amber-300 border-amber-600/30 font-semibold'
+                          : 'bg-zinc-800/50 text-zinc-400 border-zinc-700/40'
+                      }`}
+                    >
+                      {pc.company} ({pc.years}yr)
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Experience, Location & Education */}
               <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400 mt-2">

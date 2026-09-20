@@ -3,17 +3,17 @@
 import React from 'react';
 import { useAppDispatch, useAppSelector } from '../../redux/hooks';
 import {
-  toggleCompanyType,
   setExperienceRange,
   runInitialSearch,
   setQuery,
   resetSearchState,
+  setStrictMatchMode,
 } from '../../redux/slices/sourcingSlice';
-import { UserX, RotateCcw, Search, Building2, Sparkles } from 'lucide-react';
+import { UserX, RotateCcw, Building2, Sparkles, Compass } from 'lucide-react';
 
 export const EmptyState: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { filters, currentQuery } = useAppSelector((state) => state.sourcing);
+  const { filters, currentQuery, strictMatchMode } = useAppSelector((state) => state.sourcing);
 
   const availableCompanies = [
     'Oracle',
@@ -36,7 +36,14 @@ export const EmptyState: React.FC = () => {
   const handleCompanyClick = (company: string) => {
     const q = `candidates who worked at ${company}`;
     dispatch(setQuery(q));
-    dispatch(runInitialSearch(q));
+    dispatch(runInitialSearch({ query: q, strictMatch: strictMatchMode }));
+  };
+
+  const handleSwitchToSmartExpansion = () => {
+    dispatch(setStrictMatchMode(false));
+    if (currentQuery) {
+      dispatch(runInitialSearch({ query: currentQuery, strictMatch: false }));
+    }
   };
 
   const handleReset = () => {
@@ -54,11 +61,24 @@ export const EmptyState: React.FC = () => {
         No Matching Candidates Found
       </h3>
 
-      <p className="text-xs text-zinc-400 max-w-md mx-auto mb-5 leading-relaxed">
+      <p className="text-xs text-zinc-400 max-w-md mx-auto mb-4 leading-relaxed">
         {filters.target_companies && filters.target_companies.length > 0
-          ? `We couldn't find any candidates in the 150-profile candidate pool matching company "${filters.target_companies.join(', ')}".`
-          : 'No candidate profiles matched all of your specified criteria. Try relaxing your filters or exploring available companies.'}
+          ? `We couldn't find any candidate profiles in our 150-profile talent pool with verified experience at "${filters.target_companies.join(', ')}" in Strict Match mode.`
+          : 'No candidate profiles matched all of your strict criteria. Try switching to Smart Expansion or exploring available companies below.'}
       </p>
+
+      {/* Switch to Smart Expansion Action */}
+      {strictMatchMode && (
+        <div className="mb-5 max-w-md mx-auto">
+          <button
+            onClick={handleSwitchToSmartExpansion}
+            className="w-full py-2 px-3 rounded-xl bg-indigo-950/70 hover:bg-indigo-900/80 text-indigo-200 border border-indigo-700/60 text-xs font-semibold flex items-center justify-center space-x-2 transition-all shadow-sm"
+          >
+            <Compass className="w-4 h-4 text-indigo-400" />
+            <span>Switch to Smart Expansion (Include Related Companies & Skills)</span>
+          </button>
+        </div>
+      )}
 
       {/* Available Companies in the pool */}
       <div className="mb-6 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 max-w-lg mx-auto text-left">
@@ -100,7 +120,7 @@ export const EmptyState: React.FC = () => {
           onClick={() => {
             const q = 'RDS developers with 4-7 years of experience who have worked at startups in Bangalore.';
             dispatch(setQuery(q));
-            dispatch(runInitialSearch(q));
+            dispatch(runInitialSearch({ query: q, strictMatch: false }));
           }}
           className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-zinc-200 hover:bg-white text-zinc-900 text-xs font-medium transition-colors"
         >

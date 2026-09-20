@@ -37,6 +37,8 @@ export class RankingService {
       const matchStatus = resultMap.get(sc.profile.id.toLowerCase());
       if (matchStatus) {
         sc.passed_filters = matchStatus.filterPassStatus;
+        sc.is_exact_match = matchStatus.isExactMatch;
+        sc.related_match_reason = matchStatus.relatedMatchReason;
       }
       return sc;
     });

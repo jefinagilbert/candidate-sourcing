@@ -13,6 +13,7 @@ export interface SourcingSearchResult {
   needsClarification?: boolean;
   clarificationMessage?: string;
   suggestedClarifications?: string[];
+  message?: string;
   filters: SearchFilters;
   rubric: FitRubric;
   results: ScoredCandidate[];
@@ -25,6 +26,7 @@ export interface SourcingSearchResult {
 export interface RefinementResponse {
   filters: SearchFilters;
   rubric: FitRubric;
+  message?: string;
   changes: {
     filter_changes: string[];
     rubric_changes: string[];
@@ -52,7 +54,7 @@ export class SourcingService {
    * Handles edge cases and misleading queries with friendly user clarification.
    */
   async executeInitialSearch(dto: InitialSearchDto): Promise<SourcingSearchResult> {
-    this.logger.log(`Executing initial sourcing search for query: "${dto.query}"`);
+    this.logger.log(`Executing initial sourcing search for query: "${dto.query}" (strictMatch: ${dto.strictMatch ?? true})`);
 
     // 1. LLM Extraction: Free text -> Structured Filters + Fit Rubric (or Clarification request)
     const extracted = await this.llmService.extractFiltersAndRubric(dto.query);
@@ -75,21 +77,38 @@ export class SourcingService {
     }
 
     const { filters, rubric } = extracted;
+    if (dto.strictMatch !== undefined) {
+      filters.strict_match = dto.strictMatch;
+    } else if (filters.strict_match === undefined) {
+      filters.strict_match = true;
+    }
 
-    // 2. Filter local 48-profile dataset
+    // 2. Filter local talent pool
     const allProfiles = this.candidatesService.getAll();
     const filterResults = this.filterEngine.filterCandidates(allProfiles, filters);
     const exactMatches = filterResults.filter((f) => f.isExactMatch).length;
 
-    // 3. LLM Scoring and Ranking against Rubric
+    // 3. Score and Rank candidates against Rubric
     const rankedCandidates = await this.rankingService.rankFilteredCandidates(
       filterResults,
       rubric
     );
 
+    let informationalMessage: string | undefined;
+    if (filterResults.length === 0) {
+      if (filters.target_companies && filters.target_companies.length > 0) {
+        informationalMessage = `No candidates in the ${allProfiles.length}-profile pool have verified experience at "${filters.target_companies.join(', ')}" in Strict Match mode. Try toggling off "Strict Match" to explore candidates from related companies.`;
+      } else {
+        informationalMessage = `No candidates matched all of your strict criteria. Try broadening experience/skills or switching to Smart Expansion mode.`;
+      }
+    } else if (filters.strict_match === false && filterResults.some((r) => r.isRelatedMatch)) {
+      informationalMessage = `Smart Expansion active: Surfaced ${filterResults.length} exact and transferable candidate profiles.`;
+    }
+
     return {
       query: dto.query,
       needsClarification: false,
+      message: informationalMessage,
       filters,
       rubric,
       results: rankedCandidates.slice(0, 5),
@@ -105,7 +124,7 @@ export class SourcingService {
    * Adjusts filters and rubric based on recruiter feedback, re-runs search, and returns updated results.
    */
   async executeRefinement(dto: RefineSearchDto): Promise<RefinementResponse> {
-    this.logger.log(`Executing refinement loop for feedback: "${dto.userFeedback}"`);
+    this.logger.log(`Executing refinement loop for feedback: "${dto.userFeedback}" (strictMatch: ${dto.strictMatch ?? true})`);
 
     const currentFilters: SearchFilters = dto.currentFilters || {
       skills: ['AWS RDS', 'Node.js'],
@@ -113,7 +132,12 @@ export class SourcingService {
       max_years_experience: 8,
       locations: ['Bangalore'],
       company_types: ['startup'],
+      strict_match: dto.strictMatch ?? true,
     };
+
+    if (dto.strictMatch !== undefined) {
+      currentFilters.strict_match = dto.strictMatch;
+    }
 
     const currentRubric: FitRubric =
       dto.currentRubric && dto.currentRubric.criteria?.length > 0
@@ -158,6 +182,12 @@ export class SourcingService {
       dto.chatHistory
     );
 
+    if (dto.strictMatch !== undefined) {
+      refinement.filters.strict_match = dto.strictMatch;
+    } else if (currentFilters.strict_match !== undefined) {
+      refinement.filters.strict_match = currentFilters.strict_match;
+    }
+
     // 2. Re-filter local dataset with updated parameters
     const allProfiles = this.candidatesService.getAll();
     const filterResults = this.filterEngine.filterCandidates(allProfiles, refinement.filters);
@@ -168,9 +198,19 @@ export class SourcingService {
       refinement.rubric
     );
 
+    let informationalMessage: string | undefined;
+    if (filterResults.length === 0) {
+      if (refinement.filters.target_companies && refinement.filters.target_companies.length > 0) {
+        informationalMessage = `No candidates in the pool matched exact experience at "${refinement.filters.target_companies.join(', ')}".`;
+      } else {
+        informationalMessage = `Refined criteria yielded 0 matches in the candidate pool.`;
+      }
+    }
+
     return {
       filters: refinement.filters,
       rubric: refinement.rubric,
+      message: informationalMessage,
       changes: refinement.changes,
       explanation: refinement.explanation_for_recruiter,
       results: rankedCandidates.slice(0, 5),
@@ -185,18 +225,32 @@ export class SourcingService {
    */
   async reevaluateWithManualFilters(
     filters: SearchFilters,
-    rubric: FitRubric
-  ): Promise<{ results: ScoredCandidate[]; filteredCount: number }> {
+    rubric: FitRubric,
+    strictMatch?: boolean
+  ): Promise<{ results: ScoredCandidate[]; filteredCount: number; message?: string }> {
+    const safeFilters = { ...filters };
+    if (strictMatch !== undefined) {
+      safeFilters.strict_match = strictMatch;
+    }
+
     const allProfiles = this.candidatesService.getAll();
-    const filterResults = this.filterEngine.filterCandidates(allProfiles, filters);
+    const filterResults = this.filterEngine.filterCandidates(allProfiles, safeFilters);
     const rankedCandidates = await this.rankingService.rankFilteredCandidates(
       filterResults,
       rubric
     );
 
+    let message: string | undefined;
+    if (filterResults.length === 0) {
+      message = 'No candidates matched all manual criteria in Strict mode. Try loosening filters or switching to Smart Expansion.';
+    } else {
+      message = `Filtered candidate pool: ${filterResults.length} candidate(s) matched criteria. Showing top ${Math.min(10, filterResults.length)} results.`;
+    }
+
     return {
-      results: rankedCandidates.slice(0, 5),
+      results: rankedCandidates.slice(0, 10),
       filteredCount: filterResults.length,
+      message,
     };
   }
 
@@ -224,6 +278,8 @@ export class SourcingService {
         location: c.profile.location,
         match_score: c.match_score,
         fit_level: c.fit_level,
+        is_exact_match: c.is_exact_match,
+        related_match_reason: c.related_match_reason,
         key_skills: c.profile.skills,
         match_explanation: c.explanation,
         cited_facts: c.cited_facts,

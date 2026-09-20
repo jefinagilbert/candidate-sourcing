@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SearchFilters } from '../entities/search-filters.entity';
 import { FitRubric } from '../entities/fit-rubric.entity';
@@ -28,6 +28,10 @@ export class RefineSearchDto {
 
   @IsOptional()
   currentRubric?: FitRubric;
+
+  @IsOptional()
+  @IsBoolean()
+  strictMatch?: boolean;
 
   @IsOptional()
   @IsArray()

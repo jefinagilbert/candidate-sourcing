@@ -33,11 +33,14 @@ export interface ScoredCandidate {
   explanation: string;
   cited_facts: CandidateFactCitation[];
   criteria_scores: CriterionScore[];
+  is_exact_match?: boolean;
+  related_match_reason?: string;
   passed_filters: {
     skills: boolean;
     experience: boolean;
     location: boolean;
     company_type: boolean;
+    company_name?: boolean;
     notes?: string;
   };
 }

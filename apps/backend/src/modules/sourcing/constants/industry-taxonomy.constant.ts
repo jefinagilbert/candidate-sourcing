@@ -135,3 +135,26 @@ export const INDUSTRY_TAXONOMY = {
     tier1: ['IIT', 'BITS', 'NIT', 'IIIT', 'Stanford', 'MIT', 'Berkeley', 'Harvard', 'IISc', 'CMU', 'DTU', 'VJTI', 'COEP'],
   },
 };
+
+/**
+ * Resolves related companies, sibling cluster members, or similar domain companies.
+ */
+export function getRelatedCompaniesAndKeywords(targetCompany: string): { relatedCompanies: string[]; domainKeywords: string[] } {
+  const norm = targetCompany.toLowerCase().trim();
+  const relatedCompanies = new Set<string>();
+  const domainKeywords = new Set<string>();
+
+  for (const [key, cluster] of Object.entries(INDUSTRY_TAXONOMY.clusters)) {
+    const hasCompany = cluster.companies.some(c => c.toLowerCase().includes(norm) || norm.includes(c.toLowerCase()));
+    if (hasCompany || key.includes(norm) || norm.includes(key)) {
+      cluster.companies.forEach(c => relatedCompanies.add(c));
+      cluster.keywords.forEach(k => domainKeywords.add(k));
+    }
+  }
+
+  return {
+    relatedCompanies: Array.from(relatedCompanies),
+    domainKeywords: Array.from(domainKeywords),
+  };
+}
+

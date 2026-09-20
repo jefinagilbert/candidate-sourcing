@@ -36,7 +36,7 @@ export class SourcingController {
   @Post('reevaluate')
   @HttpCode(HttpStatus.OK)
   async reevaluateManually(@Body() dto: UpdateFiltersAndRubricDto) {
-    return await this.sourcingService.reevaluateWithManualFilters(dto.filters, dto.rubric);
+    return await this.sourcingService.reevaluateWithManualFilters(dto.filters, dto.rubric, dto.strictMatch);
   }
 
   @Post('freeze')

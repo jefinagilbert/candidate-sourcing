@@ -2,8 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../../redux/hooks';
-import { runInitialSearch, setQuery } from '../../redux/slices/sourcingSlice';
-import { Search, ArrowRight, Sparkles } from 'lucide-react';
+import {
+  runInitialSearch,
+  setQuery,
+  toggleStrictMatchMode,
+} from '../../redux/slices/sourcingSlice';
+import { Search, ArrowRight, Sparkles, Shield, Compass } from 'lucide-react';
 
 interface SearchBarProps {
   isInitialView?: boolean;
@@ -11,7 +15,7 @@ interface SearchBarProps {
 
 export const SearchBar: React.FC<SearchBarProps> = ({ isInitialView = false }) => {
   const dispatch = useAppDispatch();
-  const { currentQuery, status } = useAppSelector((state) => state.sourcing);
+  const { currentQuery, status, strictMatchMode } = useAppSelector((state) => state.sourcing);
   const [inputText, setInputText] = useState(
     currentQuery || 'RDS developers with 4-7 years of experience who have worked at startups, for a role based in Bangalore.'
   );
@@ -28,7 +32,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ isInitialView = false }) =
     const textToSearch = (queryText || inputText).trim();
     if (!textToSearch || isSearching) return;
     dispatch(setQuery(textToSearch));
-    dispatch(runInitialSearch(textToSearch));
+    dispatch(runInitialSearch({ query: textToSearch, strictMatch: strictMatchMode }));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -64,23 +68,59 @@ export const SearchBar: React.FC<SearchBarProps> = ({ isInitialView = false }) =
             />
           </div>
 
-          <div className="flex items-center justify-between pt-2.5 border-t border-zinc-800/80 text-xs">
-            <span className="text-zinc-500 text-[11px]">Press Enter ↵ to search</span>
+          <div className="flex flex-wrap items-center justify-between pt-2.5 border-t border-zinc-800/80 text-xs gap-2">
+            {/* Strict Match vs Smart Expansion Toggle */}
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => dispatch(toggleStrictMatchMode())}
+                className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all ${
+                  strictMatchMode
+                    ? 'bg-zinc-800/90 text-zinc-200 border-zinc-700 hover:bg-zinc-750'
+                    : 'bg-indigo-950/50 text-indigo-300 border-indigo-800/60 hover:bg-indigo-900/40'
+                }`}
+                title={
+                  strictMatchMode
+                    ? 'Strict Match: Only return candidates matching exact companies & specific fields'
+                    : 'Smart Expansion: Broadens search to related companies & transferable skillsets'
+                }
+              >
+                {strictMatchMode ? (
+                  <>
+                    <Shield className="w-3 h-3 text-emerald-400 shrink-0" />
+                    <span>Strict Match: On</span>
+                  </>
+                ) : (
+                  <>
+                    <Compass className="w-3 h-3 text-indigo-400 shrink-0" />
+                    <span>Smart Expansion: On</span>
+                  </>
+                )}
+              </button>
 
-            <button
-              onClick={() => handleSearch()}
-              disabled={!inputText.trim() || isSearching}
-              className="px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-semibold text-xs disabled:opacity-40 transition-all flex items-center space-x-1.5 shadow-sm"
-            >
-              {isSearching ? (
-                <span>Finding...</span>
-              ) : (
-                <>
-                  <span>Find Candidates</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </>
-              )}
-            </button>
+              <span className="text-zinc-500 text-[11px] hidden sm:inline">
+                {strictMatchMode ? 'Exact criteria only' : 'Includes related backgrounds'}
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2.5">
+              <span className="text-zinc-500 text-[11px] hidden sm:inline">Press Enter ↵</span>
+
+              <button
+                onClick={() => handleSearch()}
+                disabled={!inputText.trim() || isSearching}
+                className="px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 font-semibold text-xs disabled:opacity-40 transition-all flex items-center space-x-1.5 shadow-sm"
+              >
+                {isSearching ? (
+                  <span>Finding...</span>
+                ) : (
+                  <>
+                    <span>Find Candidates</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
