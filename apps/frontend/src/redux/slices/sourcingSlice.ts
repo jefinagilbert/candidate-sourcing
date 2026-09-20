@@ -9,9 +9,11 @@ import { SourcingApiService } from '../../services/sourcing.service';
 
 interface SourcingSliceState {
   currentQuery: string;
+  strictMatchMode: boolean;
   needsClarification: boolean;
   clarificationMessage: string | null;
   suggestedClarifications: string[];
+  searchMessage: string | null;
   filters: SearchFilters;
   rubric: FitRubric;
   candidates: ScoredCandidate[];
@@ -20,6 +22,7 @@ interface SourcingSliceState {
   exactMatchCount: number;
   activeLlmProvider: string;
   status: 'idle' | 'searching' | 'refining' | 'frozen' | 'error';
+  isReevaluating: boolean;
   errorMessage: string | null;
   refinementCount: number;
   freezeData: any | null;
@@ -32,6 +35,7 @@ const initialFilters: SearchFilters = {
   max_years_experience: 7,
   locations: ['Bangalore'],
   company_types: ['startup'],
+  strict_match: true,
 };
 
 const initialRubric: FitRubric = {
@@ -67,67 +71,86 @@ const initialRubric: FitRubric = {
 
 const initialState: SourcingSliceState = {
   currentQuery: '',
+  strictMatchMode: true,
   needsClarification: false,
   clarificationMessage: null,
   suggestedClarifications: [],
+  searchMessage: null,
   filters: initialFilters,
   rubric: initialRubric,
   candidates: [],
-  totalPoolCount: 48,
+  totalPoolCount: 150,
   filteredCount: 0,
   exactMatchCount: 0,
   activeLlmProvider: 'gemini',
   status: 'idle',
+  isReevaluating: false,
   errorMessage: null,
   refinementCount: 0,
   freezeData: null,
   selectedCandidate: null,
 };
 
-export const runInitialSearch = createAsyncThunk(
-  'sourcing/runInitialSearch',
-  async (query: string, { rejectWithValue }) => {
-    try {
-      const response = await SourcingApiService.executeInitialSearch(query);
-      return response;
-    } catch (err: any) {
-      return rejectWithValue(err.message || 'Failed to execute sourcing search');
-    }
-  }
-);
+export const runInitialSearch = createAsyncThunk<
+  any,
+  string | { query: string; strictMatch?: boolean },
+  { state: { sourcing: SourcingSliceState } }
+>('sourcing/runInitialSearch', async (payload, { getState, rejectWithValue }) => {
+  try {
+    const query = typeof payload === 'string' ? payload : payload.query;
+    const strictMatch =
+      typeof payload === 'object' && payload.strictMatch !== undefined
+        ? payload.strictMatch
+        : getState().sourcing.strictMatchMode;
 
-export const runRefinement = createAsyncThunk(
-  'sourcing/runRefinement',
-  async (
-    params: {
-      userFeedback: string;
-      currentFilters: SearchFilters;
-      currentRubric: FitRubric;
-      profileSignals?: any[];
-      chatHistory?: any[];
-    },
-    { rejectWithValue }
-  ) => {
-    try {
-      const response = await SourcingApiService.executeRefinement(params);
-      return response;
-    } catch (err: any) {
-      return rejectWithValue(err.message || 'Failed to refine search criteria');
-    }
+    const response = await SourcingApiService.executeInitialSearch(query, strictMatch);
+    return response;
+  } catch (err: any) {
+    return rejectWithValue(err.message || 'Failed to execute sourcing search');
   }
-);
+});
 
-export const reevaluateWithFilters = createAsyncThunk(
-  'sourcing/reevaluateWithFilters',
-  async (params: { filters: SearchFilters; rubric: FitRubric }, { rejectWithValue }) => {
-    try {
-      const response = await SourcingApiService.reevaluateFilters(params.filters, params.rubric);
-      return { ...response, filters: params.filters, rubric: params.rubric };
-    } catch (err: any) {
-      return rejectWithValue(err.message || 'Failed to re-evaluate filters');
-    }
+export const runRefinement = createAsyncThunk<
+  any,
+  {
+    userFeedback: string;
+    currentFilters: SearchFilters;
+    currentRubric: FitRubric;
+    profileSignals?: any[];
+    chatHistory?: any[];
+  },
+  { state: { sourcing: SourcingSliceState } }
+>('sourcing/runRefinement', async (params, { getState, rejectWithValue }) => {
+  try {
+    const strictMatch = getState().sourcing.strictMatchMode;
+    const response = await SourcingApiService.executeRefinement({
+      ...params,
+      strictMatch,
+    });
+    return response;
+  } catch (err: any) {
+    return rejectWithValue(err.message || 'Failed to refine search criteria');
   }
-);
+});
+
+export const reevaluateWithFilters = createAsyncThunk<
+  any,
+  { filters: SearchFilters; rubric: FitRubric; strictMatch?: boolean },
+  { state: { sourcing: SourcingSliceState } }
+>('sourcing/reevaluateWithFilters', async (params, { getState, rejectWithValue }) => {
+  try {
+    const strictMatch =
+      params.strictMatch !== undefined ? params.strictMatch : getState().sourcing.strictMatchMode;
+    const response = await SourcingApiService.reevaluateFilters(
+      params.filters,
+      params.rubric,
+      strictMatch
+    );
+    return { ...response, filters: params.filters, rubric: params.rubric };
+  } catch (err: any) {
+    return rejectWithValue(err.message || 'Failed to re-evaluate filters');
+  }
+});
 
 export const freezeCurrentSearch = createAsyncThunk(
   'sourcing/freezeCurrentSearch',
@@ -154,6 +177,14 @@ export const sourcingSlice = createSlice({
   reducers: {
     setQuery(state, action: PayloadAction<string>) {
       state.currentQuery = action.payload;
+    },
+    setStrictMatchMode(state, action: PayloadAction<boolean>) {
+      state.strictMatchMode = action.payload;
+      state.filters.strict_match = action.payload;
+    },
+    toggleStrictMatchMode(state) {
+      state.strictMatchMode = !state.strictMatchMode;
+      state.filters.strict_match = state.strictMatchMode;
     },
     updateFilters(state, action: PayloadAction<Partial<SearchFilters>>) {
       state.filters = { ...state.filters, ...action.payload };
@@ -191,6 +222,36 @@ export const sourcingSlice = createSlice({
         state.filters.locations.push(loc);
       }
     },
+    addTargetCompany(state, action: PayloadAction<string>) {
+      const comp = action.payload.trim();
+      if (!state.filters.target_companies) {
+        state.filters.target_companies = [];
+      }
+      if (comp && !state.filters.target_companies.some((c) => c.toLowerCase() === comp.toLowerCase())) {
+        state.filters.target_companies.push(comp);
+      }
+    },
+    removeTargetCompany(state, action: PayloadAction<string>) {
+      if (state.filters.target_companies) {
+        state.filters.target_companies = state.filters.target_companies.filter(
+          (c) => c.toLowerCase() !== action.payload.toLowerCase()
+        );
+      }
+    },
+    clearTargetCompanies(state) {
+      state.filters.target_companies = [];
+    },
+    clearAllFilters(state) {
+      state.filters = {
+        skills: [],
+        min_years_experience: 0,
+        max_years_experience: 30,
+        locations: [],
+        company_types: [],
+        target_companies: [],
+        strict_match: state.strictMatchMode,
+      };
+    },
     updateRubricWeight(state, action: PayloadAction<{ criterionId: string; weight: number }>) {
       const crit = state.rubric.criteria.find((c) => c.id === action.payload.criterionId);
       if (crit) {
@@ -225,6 +286,7 @@ export const sourcingSlice = createSlice({
       state.needsClarification = false;
       state.clarificationMessage = null;
       state.suggestedClarifications = [];
+      state.searchMessage = null;
     });
     builder.addCase(runInitialSearch.fulfilled, (state, action) => {
       state.status = 'idle';
@@ -232,6 +294,7 @@ export const sourcingSlice = createSlice({
       state.needsClarification = !!action.payload.needsClarification;
       state.clarificationMessage = action.payload.clarificationMessage || null;
       state.suggestedClarifications = action.payload.suggestedClarifications || [];
+      state.searchMessage = action.payload.message || null;
       state.filters = action.payload.filters;
       state.rubric = action.payload.rubric;
       state.candidates = action.payload.results;
@@ -255,6 +318,7 @@ export const sourcingSlice = createSlice({
       state.status = 'idle';
       state.filters = action.payload.filters;
       state.rubric = action.payload.rubric;
+      state.searchMessage = action.payload.message || null;
       state.candidates = action.payload.results;
       state.totalPoolCount = action.payload.totalPoolCount;
       state.filteredCount = action.payload.filteredCount;
@@ -267,11 +331,21 @@ export const sourcingSlice = createSlice({
     });
 
     // Re-evaluation
+    builder.addCase(reevaluateWithFilters.pending, (state) => {
+      state.isReevaluating = true;
+      state.errorMessage = null;
+    });
     builder.addCase(reevaluateWithFilters.fulfilled, (state, action) => {
+      state.isReevaluating = false;
       state.candidates = action.payload.results;
       state.filteredCount = action.payload.filteredCount;
+      state.searchMessage = action.payload.message || null;
       state.filters = action.payload.filters;
       state.rubric = action.payload.rubric;
+    });
+    builder.addCase(reevaluateWithFilters.rejected, (state, action) => {
+      state.isReevaluating = false;
+      state.errorMessage = (action.payload as string) || 'Failed to re-evaluate filters';
     });
 
     // Freeze Search
@@ -287,12 +361,18 @@ export const sourcingSlice = createSlice({
 
 export const {
   setQuery,
+  setStrictMatchMode,
+  toggleStrictMatchMode,
   updateFilters,
   toggleCompanyType,
   addSkillFilter,
   removeSkillFilter,
   setExperienceRange,
   toggleLocation,
+  addTargetCompany,
+  removeTargetCompany,
+  clearTargetCompanies,
+  clearAllFilters,
   updateRubricWeight,
   setCandidateFeedback,
   setSelectedCandidate,

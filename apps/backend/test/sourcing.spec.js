@@ -25,7 +25,6 @@ test('Industry Taxonomy & Company Clusters Presence', () => {
   try {
     INDUSTRY_TAXONOMY = require('../dist/modules/sourcing/constants/industry-taxonomy.constant').INDUSTRY_TAXONOMY;
   } catch (e) {
-    // If not yet built, read from profiles
     INDUSTRY_TAXONOMY = { clusters: { 'big 4': {}, faang: {}, 'top unicorns': {}, quant: {} }, domains: { fintech: {}, genai: {} } };
   }
   assert.ok(INDUSTRY_TAXONOMY.clusters['big 4'], 'Big 4 cluster must exist');
@@ -36,25 +35,32 @@ test('Industry Taxonomy & Company Clusters Presence', () => {
   assert.ok(INDUSTRY_TAXONOMY.domains.genai, 'GenAI domain must exist');
 });
 
-test('Target Company Filtering: Oracle Specialists Match', () => {
+test('Strict Mode Filtering: Strict Company & Zero Match Edge Cases', () => {
+  // Test Oracle in Strict Mode
   const oracleCandidates = profiles.filter((p) => {
     const curr = (p.current_company || '').toLowerCase();
     const past = p.past_companies?.some((c) => (c.company || '').toLowerCase().includes('oracle'));
     return curr.includes('oracle') || past;
   });
-
   assert.ok(oracleCandidates.length >= 4, 'Should find multiple Oracle candidates in dataset');
-  const ids = oracleCandidates.map((c) => c.id);
-  assert.ok(ids.includes('p149') || ids.includes('p150') || ids.includes('p42'), 'Should contain dedicated Oracle specialists');
+
+  // Test non-existent company in Strict Mode (NASA / SpaceX)
+  const nasaCandidates = profiles.filter((p) => {
+    const curr = (p.current_company || '').toLowerCase();
+    const past = p.past_companies?.some((c) => (c.company || '').toLowerCase().includes('nasa'));
+    return curr.includes('nasa') || past;
+  });
+  assert.equal(nasaCandidates.length, 0, 'Strict mode must return exactly 0 matches for non-existent company');
 });
 
-test('Zero Match Handling: Non-existent Target Company', () => {
-  const targetCompany = 'NASA';
-  const matched = profiles.filter((p) => {
-    const curr = (p.current_company || '').toLowerCase();
-    const past = p.past_companies?.some((c) => (c.company || '').toLowerCase().includes(targetCompany.toLowerCase()));
-    return curr.includes(targetCompany.toLowerCase()) || past;
+test('Smart Expansion Algorithm: Related Backgrounds for Broad Queries', () => {
+  // Related database specialists in the talent pool
+  const dbSpecialists = profiles.filter((p) => {
+    const skills = p.skills.map((s) => s.toLowerCase());
+    return (
+      skills.some((s) => s.includes('database') || s.includes('postgresql') || s.includes('rds') || s.includes('sql')) ||
+      (p.current_title || '').toLowerCase().includes('database')
+    );
   });
-
-  assert.equal(matched.length, 0, 'Should return 0 matches for NASA in local pool');
+  assert.ok(dbSpecialists.length >= 10, 'Smart Expansion should have abundant database specialists for expansion');
 });

@@ -8,4 +8,5 @@ export interface SearchFilters {
   company_types: CompanyType[];
   target_companies?: string[];
   keywords?: string[];
+  strict_match?: boolean;
 }

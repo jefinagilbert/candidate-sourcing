@@ -328,13 +328,31 @@ export class LlmService {
       ? filters.companies.filter((c: any) => typeof c === 'string' && c.trim())
       : undefined;
 
+    const hasTargetCompanies = targetCompanies && targetCompanies.length > 0;
+
+    // When target companies are specified, DON'T force default skills/locations/company_types
+    // Let the company filter be authoritative
+    const skills = Array.isArray(filters.skills) && filters.skills.length > 0
+      ? filters.skills
+      : hasTargetCompanies
+      ? [] // No forced skills when searching by company
+      : ['AWS RDS', 'Node.js'];
+
+    const locations = Array.isArray(filters.locations) && filters.locations.length > 0
+      ? filters.locations
+      : []; // Empty = match all locations
+
+    const companyTypes = Array.isArray(filters.company_types) && filters.company_types.length > 0
+      ? filters.company_types
+      : ['startup', 'scaleup', 'enterprise', 'agency']; // All types by default
+
     return {
-      skills: Array.isArray(filters.skills) ? filters.skills : ['AWS RDS', 'Node.js'],
+      skills,
       min_years_experience: typeof filters.min_years_experience === 'number' ? filters.min_years_experience : 0,
       max_years_experience: typeof filters.max_years_experience === 'number' ? filters.max_years_experience : 30,
-      locations: Array.isArray(filters.locations) && filters.locations.length > 0 ? filters.locations : ['Bangalore'],
-      company_types: Array.isArray(filters.company_types) && filters.company_types.length > 0 ? filters.company_types : ['startup', 'scaleup', 'enterprise', 'agency'],
-      target_companies: targetCompanies && targetCompanies.length > 0 ? targetCompanies : undefined,
+      locations,
+      company_types: companyTypes,
+      target_companies: hasTargetCompanies ? targetCompanies : undefined,
       keywords: Array.isArray(filters.keywords) ? filters.keywords : [],
     };
   }
@@ -425,7 +443,7 @@ export class LlmService {
       }
     }
 
-    // Direct company extraction from query if specific capitalized tokens follow prepositions
+    // Direct company extraction: match capitalized words after prepositions
     const companyMatch = query.match(/(?:at|from|on|in)\s+([A-Z][a-zA-Z0-9]+)/g);
     if (companyMatch) {
       companyMatch.forEach((m) => {
@@ -440,6 +458,26 @@ export class LlmService {
       });
     }
 
+    // Also extract company names that appear as standalone proper nouns without prepositions
+    // e.g. "Amazon backend developer", "Google engineers"
+    const knownCompanies = [
+      'Amazon', 'Google', 'Microsoft', 'Apple', 'Meta', 'Netflix', 'Oracle', 'SAP',
+      'Flipkart', 'Razorpay', 'Swiggy', 'Postman', 'Chargebee', 'Hasura', 'BrowserStack',
+      'CRED', 'Groww', 'Zepto', 'Meesho', 'Nykaa', 'Blinkit', 'Dream11', 'Freshworks',
+      'Infosys', 'TCS', 'Wipro', 'Accenture', 'Cognizant', 'HCL', 'Deloitte', 'PwC',
+      'EY', 'KPMG', 'Citadel', 'Goldman Sachs', 'Morgan Stanley', 'Juspay', 'CleverTap',
+      'Innovaccer', 'PharmEasy', 'PhysicsWallah', 'Unacademy', 'Zscaler', 'Palo Alto',
+      'Practo', 'Sarvam', 'Krutrim', 'NVIDIA', 'Databricks', 'Uber', 'Airbnb', 'Twitter',
+      'Salesforce', 'Adobe', 'IBM', 'Intel', 'Qualcomm', 'Samsung', 'PayPal', 'Stripe',
+    ];
+    for (const company of knownCompanies) {
+      if (lower.includes(company.toLowerCase()) && !targetCompanies.some(tc => tc.toLowerCase() === company.toLowerCase())) {
+        targetCompanies.push(company);
+      }
+    }
+
+    const hasTargetCompanies = targetCompanies.length > 0;
+
     // 1. Extract Experience
     let minExp = 0;
     let maxExp = 30;
@@ -451,7 +489,7 @@ export class LlmService {
     } else if (minOnlyMatch) {
       minExp = parseInt(minOnlyMatch[1], 10);
       maxExp = minExp + 5;
-    } else if (!targetCompanies.length) {
+    } else if (!hasTargetCompanies) {
       minExp = 3;
       maxExp = 8;
     }
@@ -473,12 +511,50 @@ export class LlmService {
     if (lower.includes('mumbai')) locations.push('Mumbai');
     if (lower.includes('delhi') || lower.includes('ncr') || lower.includes('gurgaon')) locations.push('Delhi NCR');
     if (lower.includes('remote')) locations.push('Remote');
-    if (locations.length === 0) locations.push('Bangalore', 'Hyderabad', 'Pune', 'Mumbai', 'Delhi NCR', 'Remote');
+    // If no location specified, DON'T default — match all locations
 
-    // 4. Extract Skills
-    const skillsList = ['AWS RDS', 'Node.js', 'PostgreSQL', 'TypeScript', 'React', 'Python', 'Redis', 'Kafka', 'Docker', 'Kubernetes', 'Golang', 'Java', 'Next.js', 'Terraform', 'Monitoring'];
+    // 4. Extract Skills — role-based keyword detection
+    const roleSkillMap: Record<string, string[]> = {
+      'backend': ['Node.js', 'Java', 'Go', 'Python', 'PostgreSQL', 'Redis', 'Kafka', 'AWS RDS', 'DynamoDB', 'Express'],
+      'frontend': ['React', 'TypeScript', 'Next.js', 'CSS', 'JavaScript', 'Vue', 'Angular', 'HTML'],
+      'fullstack': ['React', 'Node.js', 'TypeScript', 'PostgreSQL', 'Next.js', 'MongoDB'],
+      'full stack': ['React', 'Node.js', 'TypeScript', 'PostgreSQL', 'Next.js', 'MongoDB'],
+      'mobile': ['Swift', 'SwiftUI', 'Kotlin', 'React Native', 'Flutter', 'iOS', 'Android'],
+      'ios': ['Swift', 'SwiftUI', 'Combine', 'Objective-C', 'iOS'],
+      'android': ['Kotlin', 'Java', 'Android', 'Jetpack Compose'],
+      'devops': ['Docker', 'Kubernetes', 'Terraform', 'AWS', 'CI/CD', 'Jenkins', 'Ansible'],
+      'data': ['Python', 'SQL', 'Spark', 'Kafka', 'Airflow', 'Data Pipeline'],
+      'machine learning': ['Python', 'TensorFlow', 'PyTorch', 'Scikit-learn', 'ML'],
+      'ml': ['Python', 'TensorFlow', 'PyTorch', 'Scikit-learn', 'ML'],
+    };
+
+    // Detect explicit skills mentioned in query
+    const skillsList = ['AWS RDS', 'Node.js', 'PostgreSQL', 'TypeScript', 'React', 'Python', 'Redis', 'Kafka', 'Docker', 'Kubernetes', 'Golang', 'Go', 'Java', 'Next.js', 'Terraform', 'Monitoring', 'Swift', 'SwiftUI', 'Kotlin', 'Flutter', 'DynamoDB', 'MongoDB', 'GraphQL', 'gRPC'];
     const detectedSkills = skillsList.filter((s) => lower.includes(s.toLowerCase()));
-    const finalSkills = detectedSkills.length > 0 ? detectedSkills : ['PostgreSQL', 'Node.js', 'AWS RDS'];
+
+    // Detect role-based skills
+    let roleSkills: string[] = [];
+    for (const [roleKey, skills] of Object.entries(roleSkillMap)) {
+      if (lower.includes(roleKey)) {
+        roleSkills.push(...skills);
+      }
+    }
+
+    let finalSkills: string[];
+    if (detectedSkills.length > 0) {
+      finalSkills = detectedSkills;
+    } else if (roleSkills.length > 0 && !hasTargetCompanies) {
+      // Only use role-implied skills as hard filter when NOT searching by company
+      finalSkills = Array.from(new Set(roleSkills)).slice(0, 5);
+    } else if (hasTargetCompanies) {
+      // When searching by company, don't force skills — let the company filter be authoritative
+      finalSkills = [];
+    } else {
+      finalSkills = ['PostgreSQL', 'Node.js', 'AWS RDS'];
+    }
+
+    // Store detected role for rubric
+    const detectedRole = Object.keys(roleSkillMap).find(r => lower.includes(r)) || 'software';
 
     return {
       filters: {
@@ -487,27 +563,33 @@ export class LlmService {
         max_years_experience: maxExp,
         locations,
         company_types: Array.from(new Set(companyTypes)),
-        target_companies: targetCompanies.length > 0 ? Array.from(new Set(targetCompanies)) : undefined,
+        target_companies: hasTargetCompanies ? Array.from(new Set(targetCompanies)) : undefined,
         keywords: keywords.length > 0 ? Array.from(new Set(keywords)) : undefined,
       },
       rubric: {
-        role_summary: `Sourcing for ${finalSkills.join(' & ')} engineers with ${minExp}-${maxExp} years experience in ${locations.join(', ')} having strong ${companyTypes.join('/')} background.`,
+        role_summary: hasTargetCompanies
+          ? `Sourcing ${detectedRole} developers from ${targetCompanies.join(', ')} with ${minExp}-${maxExp} years experience.`
+          : `Sourcing for ${finalSkills.join(' & ')} engineers with ${minExp}-${maxExp} years experience having strong ${companyTypes.join('/')} background.`,
         criteria: [
           {
-            id: 'cloud_db_backend',
-            name: 'Cloud DB & Backend Proficiency',
-            weight: 40,
-            description: `Proven hands-on depth with ${finalSkills.slice(0, 3).join(', ')} and production backend architectures.`,
-            positive_signals: ['AWS RDS database tuning', 'High concurrency Node.js/Postgres services', 'Data schema optimization'],
-            negative_signals: ['Generic developer with no explicit cloud database maintenance'],
+            id: 'tech_mastery',
+            name: `${detectedRole.charAt(0).toUpperCase() + detectedRole.slice(1)} Technical Proficiency`,
+            weight: hasTargetCompanies ? 30 : 40,
+            description: `Proven hands-on depth with ${detectedRole} engineering and production architectures.`,
+            positive_signals: roleSkills.length > 0 ? roleSkills.slice(0, 3).map(s => `${s} production experience`) : ['Production engineering depth', 'System design capability'],
+            negative_signals: ['Generic developer with no specialized depth'],
           },
           {
-            id: 'company_culture_fit',
-            name: 'High-Velocity Company Background',
-            weight: 35,
-            description: `Substantial track record shipping high-impact products at ${companyTypes.join(' or ')} environments.`,
-            positive_signals: ['Direct startup product ownership', 'Fintech or scaleup growth engineering'],
-            negative_signals: ['Only legacy maintenance without product agility'],
+            id: 'company_pedigree',
+            name: hasTargetCompanies ? `${targetCompanies.join(' / ')} Background` : 'Company Background',
+            weight: hasTargetCompanies ? 45 : 35,
+            description: hasTargetCompanies
+              ? `Direct experience at ${targetCompanies.join(', ')} or closely related organizations.`
+              : `Substantial track record at ${companyTypes.join(' or ')} environments.`,
+            positive_signals: hasTargetCompanies
+              ? targetCompanies.map(c => `Currently or previously employed at ${c}`)
+              : ['Direct startup/scaleup product ownership'],
+            negative_signals: ['Completely mismatched company background'],
           },
           {
             id: 'seniority_fit',
@@ -518,10 +600,9 @@ export class LlmService {
             negative_signals: [`Outside the ${minExp}-${maxExp} year scope`],
           },
         ],
-        dealbreakers: [
-          `No hands-on experience in ${finalSkills[0] || 'core stack'}`,
-          `Less than ${minExp} years total production experience`,
-        ],
+        dealbreakers: hasTargetCompanies
+          ? [`No verified experience at ${targetCompanies.join(', ')}`, `Less than ${minExp} years total production experience`]
+          : [`No hands-on experience in ${finalSkills[0] || 'core stack'}`, `Less than ${minExp} years total production experience`],
       },
     };
   }

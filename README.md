@@ -120,10 +120,13 @@ The dataset has been expanded to **150 rich, realistic candidate profiles** (`p0
 
 ## 🎨 UI & UX Design System
 
-1. **Low-Contrast Dark Mode**: Designed with a calm, eye-friendly `#111215` / `#18191e` dark palette and muted zinc typography to prevent eye fatigue during high-volume recruiting sessions.
-2. **100% HR-Friendly Recruitment Terminology**: Completely free of developer and AI jargon. Clean terms like *"Find Candidates"*, *"Match Score"*, *"Shortlist"*, *"Pass"*, *"Refine Criteria"*, and *"Export Shortlist"*.
-3. **Interactive Candidate Actions**: 1-click Shortlist and Pass buttons, detailed profile modal inspect views, and company tier badges (*Startup, Scaleup, Enterprise, Consulting*).
-4. **Informative Zero-Match State**: When no profiles match strict parameters, an empty state clearly explains the criteria and presents clickable pills to explore available companies in the pool.
+1. **Strict Match Mode vs. Smart Expansion Toggle**:
+   - 🛡️ **Strict Match (Default)**: Enforces hard filtering on requested target companies, exact skills, and specific fields. If a candidate didn't work at the requested company or lacks the exact skill, they are excluded. If 0 candidates exist, an informative zero-match state is surfaced immediately with 1-click retry options.
+   - 🌐 **Smart Expansion Mode**: Intelligently broadens search when requested. Surfaces candidates from sibling company tiers (*e.g., enterprise database engineers from SAP Labs / Walmart DB infra when searching Oracle*), adjacent domain keywords, and transferable technical skills with clear `Transferable Match` badges.
+2. **Low-Contrast Dark Mode**: Designed with a calm, eye-friendly `#111215` / `#18191e` dark palette and muted zinc typography to prevent eye fatigue during high-volume recruiting sessions.
+3. **100% HR-Friendly Recruitment Terminology**: Completely free of developer and AI jargon. Clean terms like *"Find Candidates"*, *"Match Score"*, *"Shortlist"*, *"Pass"*, *"Refine Criteria"*, and *"Export Shortlist"*.
+4. **Interactive Candidate Actions**: 1-click Shortlist and Pass buttons, detailed profile modal inspect views, and company tier badges (*Startup, Scaleup, Enterprise, Consulting*).
+5. **Informative Zero-Match State**: When no profiles match strict parameters, an empty state clearly explains the criteria and presents clickable pills to explore available companies in the pool or switch to Smart Expansion in 1 click.
 
 ---
 
