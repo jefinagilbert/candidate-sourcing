@@ -25,8 +25,6 @@ cp .env.example .env
 Set your **`GEMINI_API_KEY`** in `.env` (or in `apps/backend/.env`):
 ```env
 GEMINI_API_KEY=your_google_gemini_api_key_here
-PORT=4000
-NODE_ENV=development
 ```
 > **Note**: If no API key is provided, the backend seamlessly falls back to **Smart Heuristic Grounding Mode**, ensuring full functionality out of the box.
 
